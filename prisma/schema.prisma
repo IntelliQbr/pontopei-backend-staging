@@ -1,0 +1,359 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ===== AUTHENTICATION & USERS =====
+model User {
+    id        String   @id @default(cuid())
+    fullName  String
+    email     String   @unique
+    password  String? // Optional for OAuth users
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    isAdmin   Boolean  @default(false)
+
+    // Relations
+    profile   Profile?
+    AIRequest AIRequest[]
+
+    @@map("users")
+}
+
+model Profile {
+    id             String      @id @default(cuid())
+    userId         String      @unique
+    role           ProfileRole
+    subscriptionId String?
+    schoolId       String?
+    createdById    String?
+    avatarUrl      String?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+    school               School?               @relation(fields: [schoolId], references: [id])
+    createdSchools       School[]              @relation("CreatedBy") // DIRECTOR can create schools
+    createdStudents      Student[]             @relation("CreatedBy")
+    createdTeachers      Profile[]             @relation("CreatedBy")
+    createdBy            Profile?              @relation("CreatedBy", fields: [createdById], references: [id])
+    createdPEIs          PEI[]                 @relation("CreatedBy")
+    createdNotes         Note[]                @relation("CreatedBy")
+    createdPlans         WeeklyPlan[]          @relation("CreatedBy")
+    classroomAssignments ClassroomAssignment[]
+    createdClassrooms    Classroom[]           @relation("ClassroomCreator") // DIRECTOR can create classrooms
+    subscription         Subscription?         @relation(fields: [subscriptionId], references: [id])
+
+    @@map("profiles")
+}
+
+enum ProfileRole {
+    DIRECTOR // Can create schools, teachers and classrooms
+    TEACHER // Can manage students and educational content
+}
+
+// ===== SCHOOLS & ORGANIZATION =====
+model School {
+    id      String @id @default(cuid())
+    name    String @unique
+    address String
+
+    // Track who created the school
+    createdById String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    createdBy  Profile     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+    profiles   Profile[] // All users in this school
+    students   Student[]
+    classrooms Classroom[]
+    AIRequest  AIRequest[]
+
+    @@map("schools")
+}
+
+model Classroom {
+    id       String      @id @default(cuid())
+    name     String
+    grade    String
+    period   ClassPeriod
+    capacity Int? // Maximum number of students
+    schoolId String
+
+    // Track who created the classroom (should be DIRECTOR)
+    createdById String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    school      School                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+    createdBy   Profile               @relation("ClassroomCreator", fields: [createdById], references: [id], onDelete: Cascade)
+    assignments ClassroomAssignment[]
+
+    @@map("classrooms")
+}
+
+model ClassroomAssignment {
+    id          String           @id @default(cuid())
+    studentId   String           @unique
+    teacherId   String
+    classroomId String
+    status      AssignmentStatus @default(ACTIVE)
+
+    assignedDate DateTime @default(now())
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    // Relations
+    student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+    teacher   Profile   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+    classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+    @@unique([studentId, classroomId])
+    @@map("classroom_assignments")
+}
+
+enum ClassPeriod {
+    MORNING
+    AFTERNOON
+    EVENING
+}
+
+enum AssignmentStatus {
+    ACTIVE
+    INACTIVE
+    TRANSFERRED
+}
+
+// ===== STUDENTS =====
+model Student {
+    id             String        @id @default(cuid())
+    fullName       String
+    photoUrl       String?
+    dateOfBirth    DateTime
+    schoolId       String
+    specialNeeds   String
+    hasCamping     Boolean       @default(false)
+    parentGuardian String
+    cid            String?
+    gender         StudentGender @default(MALE)
+    status         StudentStatus @default(ACTIVE)
+    createdById    String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    medicalConditions   MedicalCondition[]
+    school              School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+    createdBy           Profile              @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+    peis                PEI[]
+    notes               Note[]
+    weeklyPlans         WeeklyPlan[]
+    classroomAssignment ClassroomAssignment?
+
+    @@map("students")
+}
+
+model MedicalCondition {
+    id        String @id @default(cuid())
+    condition String
+    age       String
+    studentId String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+    @@map("medical_conditions")
+}
+
+enum StudentGender {
+    MALE
+    FEMALE
+}
+
+enum StudentStatus {
+    ACTIVE
+    INACTIVE
+    TRANSFERRED
+}
+
+// ===== PEI (Plano Educacional Individualizado) =====
+model PEI {
+    id            String    @id @default(cuid())
+    studentId     String
+    version       Int       @default(1)
+    content       String    @db.Text
+    formQuestions Json      @default("{}")
+  secondFormQuestions Json? @default("{}")
+    startDate     DateTime
+    endDate       DateTime
+    status        PEIStatus @default(ACTIVE)
+    createdById   String
+    isRenewal     Boolean   @default(false)
+    previousPEIId String?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+    createdBy   Profile @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+    previousPEI PEI?    @relation("PEIRenewal", fields: [previousPEIId], references: [id])
+    renewals    PEI[]   @relation("PEIRenewal")
+
+    @@map("peis")
+}
+
+enum PEIStatus {
+    ACTIVE
+    INACTIVE
+    EXPIRED
+}
+
+// ===== NOTES & OBSERVATIONS =====
+model Note {
+    id          String @id @default(cuid())
+    studentId   String
+    content     String @db.Text
+    createdById String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+    createdBy Profile @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+    @@map("notes")
+}
+
+// ===== WEEKLY PLANS =====
+model WeeklyPlan {
+    id             String   @id @default(cuid())
+    studentId      String
+    weekStart      DateTime
+    weekEnd        DateTime
+    weekActivities Json     @default("{}")
+    formQuestions  Json     @default("{}")
+    content        String   @db.Text
+    createdById    String
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+    createdBy Profile @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+    @@map("weekly_plans")
+}
+
+// ===== SUBSCRIPTION SYSTEM =====
+model Subscription {
+    id         String             @id @default(cuid())
+    price      Float              @default(0)
+    planType   SubscriptionPlan
+    status     SubscriptionStatus @default(ACTIVE)
+    startDate  DateTime?
+    endDate    DateTime?
+    externalId String?            @unique
+    customerId String?            @unique
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relations
+    profiles Profile[]
+    limits   SubscriptionLimit?
+    features SubscriptionFeature?
+
+    @@map("subscriptions")
+}
+
+enum SubscriptionPlan {
+    FIT
+    BASIC
+    PREMIUM
+    PLUS
+}
+
+enum SubscriptionStatus {
+    ACTIVE
+    INACTIVE
+    EXPIRED
+    CANCELLED
+    PENDING
+}
+
+model SubscriptionLimit {
+    id                 String       @id @default(cuid())
+    maxStudents        Int
+    maxPeiPerTrimester Int
+    maxWeeklyPlans     Int
+    createdAt          DateTime     @default(now())
+    updatedAt          DateTime     @updatedAt
+    subscription       Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+    subscriptionId     String       @unique
+
+    @@map("subscription_limits")
+}
+
+model SubscriptionFeature {
+    id             String       @id @default(cuid())
+    premiumSupport Boolean
+    createdAt      DateTime     @default(now())
+    updatedAt      DateTime     @updatedAt
+    subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+    subscriptionId String       @unique
+
+    @@map("subscription_features")
+}
+
+// ===== AI REQUESTS TRACKING =====
+model AIRequest {
+    id           String        @id @default(cuid())
+    type         AIRequestType
+    inputData    String        @db.Text
+    outputData   String?       @db.Text
+    status       AIStatus      @default(PROCESSING)
+    schoolId     String
+    userId       String
+    inputTokens  Int           @default(0)
+    outputTokens Int           @default(0)
+    totalTokens  Int           @default(0)
+    model        String        @default("gemini-2.0-flash-001")
+
+    // Relations
+    school School @relation(fields: [schoolId], references: [id])
+    user   User   @relation(fields: [userId], references: [id])
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@map("ai_requests")
+}
+
+enum AIRequestType {
+    PEI_CREATION
+    PEI_RENEWAL
+    WEEKLY_PLAN
+}
+
+enum AIStatus {
+    PROCESSING
+    COMPLETED
+    ERROR
+}

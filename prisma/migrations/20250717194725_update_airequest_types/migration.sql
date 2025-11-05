@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "ai_requests" ALTER COLUMN "inputData" SET DATA TYPE TEXT,
+ALTER COLUMN "outputData" SET DATA TYPE TEXT;
