@@ -192,7 +192,7 @@ async function createSchools(users: any[]) {
         prisma.school.create({
             data: {
                 name: "Escola Municipal São José",
-                address: "Rua das Flores, 123 - Centro",
+                address: "Rua  das Flores, 123 - Centro",
                 createdById: director.profile.id,
             },
         }),
