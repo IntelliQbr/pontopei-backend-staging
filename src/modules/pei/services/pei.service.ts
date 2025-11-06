@@ -8,9 +8,9 @@ import { CreatePEIContentType } from "src/core/ai/models/types/peis/create-pei-c
 import { RenewPEIContentType } from "src/core/ai/models/types/peis/renew-pei-content.type";
 import { PEIAIService } from "src/core/ai/services/pei-ai.service";
 import { PrismaService } from "src/core/database/services/prisma.service";
-import { RequestCreatePEIDto } from "src/modules/pei/models/dtos/create/request-create-pei.dto";
-import { RequestRenewPEIDto } from "src/modules/pei/models/dtos/renew/request-renew-pei.dto";
-import { FindAllPEIQuery } from "src/modules/pei/models/dtos/queries/find-all-pei.query";
+import { RequestCreatePEIDto } from "../models/create/request-create-pei.dto";
+import { RequestRenewPEIDto } from "../models/renew/request-renew-pei.dto";
+import { FindAllPEIQuery } from "../models/queries/find-all-pei.query";
 import { omit } from "lodash";
 import { PEI, Prisma, ProfileRole } from "@prisma/client";
 
